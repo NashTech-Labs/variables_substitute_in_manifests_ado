@@ -1,0 +1,33 @@
+pool: windows-dct
+
+variables:
+  DEPLOYMENT_NAME: 'my-deployment'
+  REPLICA_COUNT: '3'
+  APP_NAME: 'my-app'
+  CONTAINER_NAME: 'my-container'
+  IMAGE_NAME: 'my-registry/my-image:latest'
+  CONTAINER_PORT: '8080'
+
+- task: KubernetesManifest@1
+  displayName: Bake K8s manifests
+  name: bake
+  inputs:
+    action: 'bake'
+    renderType: 'kustomize'
+    kustomizationPath: '$(System.DefaultWorkingDirectory)'
+
+- task: PowerShell@2
+  displayName: 'Concatenate bake.manifests with rendered manifests'
+  inputs:
+    targetType: 'inline'
+    script: |
+      $bakeManifestsContent = Get-Content "$(bake.manifestsBundle)" -Raw
+      $renderedManifestsContent = $bakeManifestsContent -replace '\$\{DEPLOYMENT_NAME\}', $env:DEPLOYMENT_NAME `
+                                                      -replace '\$\{REPLICA_COUNT\}', $env:REPLICA_COUNT `
+                                                      -replace '\$\{APP_NAME\}', $env:APP_NAME `
+                                                      -replace '\$\{CONTAINER_NAME\}', $env:CONTAINER_NAME `
+                                                      -replace '\$\{IMAGE_NAME\}', $env:IMAGE_NAME `
+                                                      -replace '\$\{CONTAINER_PORT\}', $env:CONTAINER_PORT
+
+            # Save the rendered manifests to a file
+      $renderedManifestsContent | Out-File "$(System.DefaultWorkingDirectory)/rendered.yaml" -Encoding UTF8
